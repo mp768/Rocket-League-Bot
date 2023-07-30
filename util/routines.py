@@ -214,8 +214,9 @@ class goto():
         defaultThrottle(agent, 2300, self.direction)
 
         agent.controller.boost = False
-        agent.controller.handbrake = True if abs(
-            angles[1]) > 2.3 else agent.controller.handbrake
+        # agent.controller.handbrake = True if abs(
+        #     angles[1]) > 2.3 else agent.controller.handbrake
+        agent.controller.handbrake = False
 
         velocity = 1+agent.me.velocity.magnitude()
         if distance_remaining < 350:
@@ -428,6 +429,61 @@ class recovery():
         if not agent.me.airborne:
             agent.clear_intent()
 
+
+# make a routine that just boosts towards a foe
+class ram_with_boost():
+    # Drives towards a designated target with the goal of ramming it.
+    # Optional vector controls where the car should be pointing upon reaching the target
+    # TODO - slow down if target is inside our turn radius
+    def __init__(self, foe, vector=None, direction=1):
+        self.target = foe.location
+        self.vector = vector
+        self.direction = direction
+        self.foe = foe
+
+    def run(self, agent):
+        self.target = self.foe.location
+        car_to_target = self.target - agent.me.location
+        distance_remaining = car_to_target.flatten().magnitude()
+
+        agent.line(self.target - Vector3(0, 0, 500),
+                   self.target + Vector3(0, 0, 500), [255, 0, 255])
+
+        if self.vector != None:
+            # See commends for adjustment in jump_shot or aerial for explanation
+            side_of_vector = sign(self.vector.cross(
+                (0, 0, 1)).dot(car_to_target))
+            car_to_target_perp = car_to_target.cross(
+                (0, 0, side_of_vector)).normalize()
+            adjustment = car_to_target.angle(
+                self.vector) * distance_remaining / 3.14
+            final_target = self.target + (car_to_target_perp * adjustment)
+        else:
+            final_target = self.target
+
+        # Some adjustment to the final target to ensure it's inside the field and we don't try to dirve through any goalposts to reach it
+        if abs(agent.me.location[1]) > 5150:
+            final_target[0] = cap(final_target[0], -750, 750)
+
+        local_target = agent.me.local(final_target - agent.me.location)
+
+        angles = defaultPD(agent, local_target, self.direction)
+        defaultThrottle(agent, 2300, self.direction)
+
+        # agent.controller.boost = False
+        agent.controller.handbrake = False
+
+        agent.controller.boost = True
+
+        velocity = 1+agent.me.velocity.magnitude()
+        if distance_remaining < 150:
+            agent.clear_intent()
+        elif abs(angles[1]) < 0.05 and velocity > 600 and velocity < 2150 and distance_remaining / velocity > 2.0:
+            agent.set_intent(flip(local_target))
+        elif abs(angles[1]) > 2.8 and velocity < 200:
+            agent.set_intent(flip(local_target, True))
+        elif agent.me.airborne:
+            agent.set_intent(recovery(self.target))
 
 class short_shot():
     # This routine drives towards the ball and attempts to hit it towards a given target
